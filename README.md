@@ -62,6 +62,12 @@ uv run ruff format --check
 uv run pyright
 ```
 
+## Publishing
+
+Publish to TestPyPI first with the manual GitHub Actions workflow in
+`.github/workflows/publish-testpypi.yml`, then publish to PyPI with
+`.github/workflows/publish-pypi.yml`.
+
 ## Source Of Truth
 
 Project decisions live in `AGENTS.md`. Implementation follows that document.

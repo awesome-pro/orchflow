@@ -37,8 +37,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/abhinandan/orchflow"
-Issues = "https://github.com/abhinandan/orchflow/issues"
+Homepage = "https://github.com/awesome-pro/orchflow"
+Issues = "https://github.com/awesome-pro/orchflow/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/orchflow"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -143,6 +144,92 @@ async def test_failed_flow_can_return_result() -> None:
     assert result.error == "boom"
 
 
+async def test_empty_flow_is_invalid() -> None:
+    with pytest.raises(ValueError, match="at least one step"):
+        Flow([])
+
+
+async def test_duplicate_step_names_are_invalid() -> None:
+    @step(name="duplicate")
+    async def first(input, context):
+        return "first"
+
+    @step(name="duplicate")
+    async def second(input, context):
+        return "second"
+
+    with pytest.raises(ValueError, match="Duplicate step name: duplicate"):
+        Flow([first, second])
+
+
+async def test_duplicate_step_names_inside_condition_are_invalid() -> None:
+    @step(name="classify")
+    async def classify(input, context):
+        return "technical"
+
+    @step(name="writer")
+    async def writer_a(input, context):
+        return "a"
+
+    @step(name="writer")
+    async def writer_b(input, context):
+        return "b"
+
+    with pytest.raises(ValueError, match="Duplicate step name: writer"):
+        Flow(
+            [
+                classify,
+                condition(
+                    when=lambda ctx: ctx.previous == "technical",
+                    then=writer_a,
+                    otherwise=writer_b,
+                ),
+            ]
+        )
+
+
+async def test_empty_parallel_group_is_invalid() -> None:
+    with pytest.raises(ValueError, match="Parallel step groups"):
+        Flow([[]])
+
+
+async def test_nested_parallel_groups_are_invalid() -> None:
+    @step
+    async def first(input, context):
+        return "first"
+
+    @step
+    async def second(input, context):
+        return "second"
+
+    with pytest.raises(TypeError, match="Nested parallel"):
+        Flow([[first, [second]]])
+
+
+async def test_condition_with_no_otherwise_returns_previous_output() -> None:
+    @step
+    async def classify(input, context):
+        return "general"
+
+    @step
+    async def technical(input, context):
+        return "technical"
+
+    result = await Flow(
+        [
+            classify,
+            condition(
+                when=lambda ctx: ctx.previous == "technical",
+                then=technical,
+            ),
+        ]
+    ).run("original")
+
+    assert result.success is True
+    assert result.output == "general"
+    assert [trace.step_name for trace in result.traces] == ["classify"]
+
+
 async def test_parallel_group_outputs_traces_and_shared_state() -> None:
     @step(name="left")
     async def left(input, context):
@@ -198,3 +285,30 @@ async def test_parallel_failure_records_failed_attempts() -> None:
     bad_traces = [trace for trace in result.traces if trace.step_name == "bad"]
     assert [trace.attempt for trace in bad_traces] == [1, 2]
     assert all(trace.parallel_group_id for trace in bad_traces)
+
+
+async def test_trace_and_result_serialization_are_flat_and_json_safe() -> None:
+    @step
+    async def first(input, context):
+        context.state["topic"] = input
+        return {"draft": "hello"}
+
+    @step
+    async def second(input, context):
+        return {"final": context.previous["draft"]}
+
+    result = await Flow([first, second], name="serialize-demo").run("original")
+
+    payload = result.to_dict()
+    encoded = json.dumps(payload)
+    decoded = json.loads(encoded)
+
+    assert decoded["success"] is True
+    assert decoded["output"] == {"final": "hello"}
+    assert decoded["state"] == {"topic": "original"}
+    assert decoded["metadata"]["flow_name"] == "serialize-demo"
+    assert isinstance(decoded["traces"], list)
+    assert [trace["step_name"] for trace in decoded["traces"]] == ["first", "second"]
+    assert all("traces" not in trace for trace in decoded["traces"])
+    assert all("parallel_group_id" in trace for trace in decoded["traces"])
+    assert all(isinstance(trace["started_at"], str) for trace in decoded["traces"])

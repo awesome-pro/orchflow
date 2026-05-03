@@ -42,6 +42,13 @@ Out of scope:
 - Visual trace UI
 - Durable agent state
 
+Validation:
+
+- Empty flows are invalid and raise `ValueError`.
+- Step names must be unique within a flow.
+- Parallel step groups must contain at least one step.
+- Nested parallel step groups are invalid in v0.1 and raise `TypeError`.
+
 ## Public API
 
 Top-level exports from `orchflow`:

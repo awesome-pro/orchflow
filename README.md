@@ -1,0 +1,67 @@
+# Orchflow
+
+Orchflow is a lightweight Python framework for readable multi-agent pipelines.
+It gives you sequential, parallel, and conditional orchestration without making
+you model everything as a graph.
+
+```python
+from orchflow import Flow, StepContext, step
+
+
+@step
+async def research(input: str, context: StepContext) -> str:
+    return f"research about {input}"
+
+
+@step
+async def write(input: str, context: StepContext) -> str:
+    return f"draft based on {context.previous}"
+
+
+result = await Flow([research, write]).run("agent orchestration")
+print(result.output)
+```
+
+## Why
+
+Plain Python chaining is easy to read but thin on retries, parallelism, and
+tracing. Heavy graph runtimes are powerful but can feel like too much for simple
+pipelines. Orchflow aims for the middle: small API, predictable state, useful
+traces, and offline-testable agent workflows.
+
+## Features
+
+- Sequential flows
+- Parallel step groups
+- Conditional routing
+- Retry policies
+- Shared run state
+- Flat structured traces
+- Public `Agent` with optional LiteLLM support
+- Offline testing helpers under `orchflow.testing`
+
+## Install
+
+```bash
+pip install orchflow
+```
+
+Optional LiteLLM-backed agents:
+
+```bash
+pip install "orchflow[litellm]"
+```
+
+## Development
+
+```bash
+uv sync --extra dev
+uv run pytest
+uv run ruff check
+uv run ruff format --check
+uv run pyright
+```
+
+## Source Of Truth
+
+Project decisions live in `AGENTS.md`. Implementation follows that document.

@@ -10,6 +10,7 @@ It gives you sequential, parallel, conditional, retryable, and observable
 orchestration, with lightweight human review and JSON resume, without forcing
 every workflow into a heavy graph runtime.
 
+
 ```bash
 pip install orchflow
 ```
@@ -116,6 +117,10 @@ flowchart LR
     H --> J["FlowResult + traces"]
     I --> J
 ```
+
+<p align="center">
+  <img src="assets/architecture.png" alt="Orchflow architecture" width="720">
+</p>
 
 ## What It Demonstrates
 

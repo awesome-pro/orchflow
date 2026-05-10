@@ -1,10 +1,16 @@
 name: Publish to PyPI
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
+
+concurrency:
+  group: pypi-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -27,6 +33,24 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --extra dev
+
+      - name: Check tag matches package version
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          with open("pyproject.toml", "rb") as pyproject:
+              version = tomllib.load(pyproject)["project"]["version"]
+
+          expected = f"v{version}"
+          if tag != expected:
+              raise SystemExit(
+                  f"Tag {tag!r} does not match pyproject version {version!r}. "
+                  f"Expected {expected!r}."
+              )
+          PY
 
       - name: Run tests
         run: uv run pytest

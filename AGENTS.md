@@ -184,6 +184,40 @@ When `Flow.run(..., raise_on_error=False)` is used, the flow returns
 - Packaging: `pyproject.toml`
 - License: MIT
 
+## Release Policy
+
+- TestPyPI publishes manually through `.github/workflows/publish-testpypi.yml`.
+- Real PyPI publishes from Git tags through `.github/workflows/publish-pypi.yml`.
+- Release tags use `vMAJOR.MINOR.PATCH`, for example `v0.1.1`.
+- The tag must match `project.version` in `pyproject.toml`.
+- `src/orchflow/__init__.py` `__version__` must also match.
+- PyPI versions are immutable; never try to republish an existing version.
+
+## Roadmap
+
+### 0.1.1 - Release Polish And DX
+
+- Tag-based PyPI publishing.
+- Publishing documentation.
+- Changelog.
+- Stronger README examples.
+- Package metadata and badge polish.
+- Built-wheel import test.
+- GitHub issue templates.
+
+### 0.2.0 - Events And Streaming
+
+- Add a flow event iterator for live observability.
+- Emit step lifecycle, retry, and flow lifecycle events.
+
+### 0.3.0 - Human Review
+
+- Add simple human-in-the-loop gates with callback and stdin support.
+
+### 0.4.0 - Checkpoints
+
+- Add lightweight JSON checkpoint and resume support.
+
 ## Test Requirements
 
 The v0.1 test suite must verify:

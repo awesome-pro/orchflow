@@ -65,8 +65,10 @@ uv run pyright
 ## Publishing
 
 Publish to TestPyPI first with the manual GitHub Actions workflow in
-`.github/workflows/publish-testpypi.yml`, then publish to PyPI with
-`.github/workflows/publish-pypi.yml`.
+`.github/workflows/publish-testpypi.yml`. Real PyPI releases are tag-based
+through `.github/workflows/publish-pypi.yml`.
+
+See `docs/publishing.md` for the full release process.
 
 ## Source Of Truth
 

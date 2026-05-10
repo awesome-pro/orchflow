@@ -74,7 +74,7 @@ Parallel outputs become a dict keyed by step name:
 {"research_web": "...", "research_docs": "..."}
 ```
 
-Parallel steps share the same `context.state` dict in v0.3. If two branches
+Parallel steps share the same `context.state` dict in v0.4. If two branches
 write the same key, the last write wins.
 
 ## Human Review
@@ -92,6 +92,26 @@ review = human_input(
 
 Without a custom provider, the step reads from stdin. In applications and tests,
 pass a sync or async `provider(prompt, context)` callback.
+
+## Checkpoint And Resume
+
+Use `JsonCheckpointStore` when a workflow should resume after a failure:
+
+```python
+from orchflow import JsonCheckpointStore
+
+store = JsonCheckpointStore("orchflow-checkpoint.json")
+result = await flow.run(
+    "agent orchestration",
+    checkpoint=store,
+    raise_on_error=False,
+)
+if not result.success:
+    resumed = await flow.resume(store)
+```
+
+Checkpoints are JSON files saved after completed top-level flow items. Completed
+checkpoints remain on disk for inspection.
 
 ## Optional Real LLM Calls
 

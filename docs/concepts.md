@@ -2,7 +2,7 @@
 
 ## Agent
 
-An `Agent` is a stateless role plus model. It is intentionally small in v0.3:
+An `Agent` is a stateless role plus model. It is intentionally small in v0.4:
 prompt in, text out.
 
 ## Step
@@ -25,7 +25,7 @@ and conditions.
 ## State
 
 `context.state` is shared mutable run state. Parallel steps share the same dict
-and use last-write-wins behavior for v0.3.
+and use last-write-wins behavior for v0.4.
 
 ## Trace
 
@@ -48,3 +48,12 @@ as normal step output.
 
 The default provider reads from stdin for local demos. Applications and tests
 can pass a sync or async provider callback.
+
+## Checkpoint
+
+`JsonCheckpointStore` writes local JSON checkpoints after completed top-level
+flow items. A resumed flow keeps the original input, previous output, state, and
+stored traces, then continues from the saved `next_step_index`.
+
+Checkpoints are intentionally JSON-only in v0.4. If input, output, state, or
+traces cannot serialize to JSON, Orchflow raises `CheckpointError`.

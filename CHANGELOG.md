@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Add `JsonCheckpointStore` for local JSON checkpoints.
+- Add `Flow.run(..., checkpoint=store)` and `Flow.resume(store)`.
+- Add checkpoint support to `Flow.events(...)` and new `Flow.resume_events(...)`.
+- Emit `checkpoint_saved` and `checkpoint_loaded` lifecycle events.
+- Add strict JSON serialization checks and `CheckpointError`.
+- Add checkpoint/resume tests, example, and documentation.
+
 ## 0.3.0
 
 - Add `human_input(...)` step helper for lightweight human review gates.

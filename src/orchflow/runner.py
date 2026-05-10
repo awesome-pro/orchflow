@@ -6,9 +6,16 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, TypeGuard
+from typing import Any, TypeGuard, cast
 from uuid import uuid4
 
+from .checkpoint import (
+    CheckpointError,
+    CheckpointSnapshot,
+    JsonCheckpointStore,
+    checkpoint_payload,
+    json_clone,
+)
 from .condition import Condition
 from .models import FlowEvent, FlowResult, StepTrace
 from .retry import RetryPolicy
@@ -37,35 +44,108 @@ class FlowRunner:
         self.flow_name = flow_name
         self.retry_policy = retry_policy
         self._event_handler = event_handler
+        self.flow_signature = flow_signature(self.steps)
 
-    async def run(self, input: FlowInput) -> FlowResult:
+    async def run(
+        self,
+        input: FlowInput,
+        *,
+        checkpoint: JsonCheckpointStore | None = None,
+    ) -> FlowResult:
         run_id = str(uuid4())
-        state: dict[str, Any] = {}
-        traces: list[StepTrace] = []
-        previous: Any = None
+        started_at = datetime.now(UTC)
+        return await self._run_from_state(
+            original_input=input,
+            previous=None,
+            state={},
+            traces=[],
+            run_id=run_id,
+            start_step_index=0,
+            checkpoint=checkpoint,
+            checkpoint_started_at=started_at.isoformat(),
+            resumed=False,
+        )
+
+    async def resume(self, checkpoint: JsonCheckpointStore) -> FlowResult:
+        snapshot = checkpoint.load()
+        self._validate_checkpoint(snapshot)
+        await self._emit(
+            FlowEvent(
+                type="checkpoint_loaded",
+                run_id=snapshot.run_id,
+                flow_name=self.flow_name,
+                timestamp=datetime.now(UTC),
+                input=snapshot.original_input,
+                metadata={
+                    "checkpoint_path": str(checkpoint.path),
+                    "status": snapshot.status,
+                    "next_step_index": snapshot.next_step_index,
+                },
+            )
+        )
+        return await self._run_from_state(
+            original_input=cast(FlowInput, snapshot.original_input),
+            previous=snapshot.previous,
+            state=snapshot.state,
+            traces=list(snapshot.traces),
+            run_id=snapshot.run_id,
+            start_step_index=snapshot.next_step_index,
+            checkpoint=checkpoint,
+            checkpoint_started_at=snapshot.started_at,
+            resumed=True,
+        )
+
+    async def _run_from_state(
+        self,
+        *,
+        original_input: FlowInput,
+        previous: Any,
+        state: dict[str, Any],
+        traces: list[StepTrace],
+        run_id: str,
+        start_step_index: int,
+        checkpoint: JsonCheckpointStore | None,
+        checkpoint_started_at: str,
+        resumed: bool,
+    ) -> FlowResult:
         started_perf = time.perf_counter()
         started_at = datetime.now(UTC)
-        metadata = {
+        metadata: dict[str, Any] = {
             "run_id": run_id,
             "flow_name": self.flow_name,
             "started_at": started_at.isoformat(),
         }
+        if checkpoint is not None:
+            metadata["checkpoint_path"] = str(checkpoint.path)
+        if resumed:
+            metadata["resumed_from_checkpoint"] = True
+            metadata["start_step_index"] = start_step_index
         await self._emit(
             FlowEvent(
                 type="flow_started",
                 run_id=run_id,
                 flow_name=self.flow_name,
                 timestamp=started_at,
-                input=input,
+                input=original_input,
                 metadata=metadata.copy(),
             )
         )
 
+        failed_step_index = start_step_index
+        checkpoint_previous = previous
+        checkpoint_state = json_clone(state, label="state") if checkpoint else state
+
         try:
-            for index, item in enumerate(self.steps):
+            for index in range(start_step_index, len(self.steps)):
+                item = self.steps[index]
+                failed_step_index = index
+                checkpoint_previous = previous
+                checkpoint_state = (
+                    json_clone(state, label="state") if checkpoint else state
+                )
                 previous = await self._run_item(
                     item=item,
-                    original_input=input,
+                    original_input=original_input,
                     previous=previous,
                     state=state,
                     traces=traces,
@@ -73,7 +153,46 @@ class FlowRunner:
                     step_index=index,
                     parallel_group_id=None,
                 )
+                if checkpoint is not None:
+                    status = "completed" if index == len(self.steps) - 1 else "running"
+                    await self._save_checkpoint(
+                        checkpoint=checkpoint,
+                        status=status,
+                        run_id=run_id,
+                        original_input=original_input,
+                        next_step_index=index + 1,
+                        previous=previous,
+                        state=state,
+                        traces=traces,
+                        checkpoint_started_at=checkpoint_started_at,
+                    )
+
+            if checkpoint is not None and start_step_index >= len(self.steps):
+                await self._save_checkpoint(
+                    checkpoint=checkpoint,
+                    status="completed",
+                    run_id=run_id,
+                    original_input=original_input,
+                    next_step_index=len(self.steps),
+                    previous=previous,
+                    state=state,
+                    traces=traces,
+                    checkpoint_started_at=checkpoint_started_at,
+                )
         except _StepFailure as failure:
+            if checkpoint is not None:
+                await self._save_checkpoint(
+                    checkpoint=checkpoint,
+                    status="failed",
+                    run_id=run_id,
+                    original_input=original_input,
+                    next_step_index=failed_step_index,
+                    previous=checkpoint_previous,
+                    state=checkpoint_state,
+                    traces=traces,
+                    checkpoint_started_at=checkpoint_started_at,
+                    error=str(failure.original_error),
+                )
             duration = time.perf_counter() - started_perf
             result = FlowResult(
                 output=previous,
@@ -121,6 +240,64 @@ class FlowRunner:
             )
         )
         return result
+
+    async def _save_checkpoint(
+        self,
+        *,
+        checkpoint: JsonCheckpointStore,
+        status: str,
+        run_id: str,
+        original_input: FlowInput,
+        next_step_index: int,
+        previous: Any,
+        state: dict[str, Any],
+        traces: list[StepTrace],
+        checkpoint_started_at: str,
+        error: str | None = None,
+    ) -> None:
+        json_clone(original_input, label="original_input")
+        json_clone(previous, label="previous")
+        json_clone(state, label="state")
+        json_clone([trace.to_dict() for trace in traces], label="traces")
+        checkpoint.save(
+            checkpoint_payload(
+                status=status,
+                run_id=run_id,
+                flow_name=self.flow_name,
+                flow_signature=self.flow_signature,
+                original_input=original_input,
+                next_step_index=next_step_index,
+                previous=previous,
+                state=state,
+                traces=traces,
+                started_at=checkpoint_started_at,
+                error=error,
+            )
+        )
+        await self._emit(
+            FlowEvent(
+                type="checkpoint_saved",
+                run_id=run_id,
+                flow_name=self.flow_name,
+                timestamp=datetime.now(UTC),
+                input=original_input,
+                metadata={
+                    "checkpoint_path": str(checkpoint.path),
+                    "status": status,
+                    "next_step_index": next_step_index,
+                },
+            )
+        )
+
+    def _validate_checkpoint(self, snapshot: CheckpointSnapshot) -> None:
+        if snapshot.status == "completed":
+            raise CheckpointError("Cannot resume a completed checkpoint")
+        if snapshot.flow_name != self.flow_name:
+            raise CheckpointError("Checkpoint flow name does not match this flow")
+        if snapshot.flow_signature != self.flow_signature:
+            raise CheckpointError("Checkpoint flow signature does not match this flow")
+        if snapshot.next_step_index < 0 or snapshot.next_step_index > len(self.steps):
+            raise CheckpointError("Checkpoint next_step_index is out of range")
 
     async def _emit(self, event: FlowEvent) -> None:
         if self._event_handler is None:
@@ -412,3 +589,28 @@ def _ensure_step(item: Any) -> Step:
 
 def _is_parallel_group(item: Any) -> TypeGuard[list[Any] | tuple[Any, ...]]:
     return isinstance(item, list | tuple)
+
+
+def flow_signature(items: Sequence[FlowItem]) -> list[dict[str, Any]]:
+    return [_item_signature(item) for item in items]
+
+
+def _item_signature(item: Any) -> dict[str, Any]:
+    if isinstance(item, Condition):
+        return {
+            "type": "condition",
+            "name": item.name,
+            "then": _item_signature(item.then),
+            "otherwise": (
+                _item_signature(item.otherwise) if item.otherwise is not None else None
+            ),
+        }
+
+    if _is_parallel_group(item):
+        return {
+            "type": "parallel",
+            "items": [_item_signature(branch) for branch in item],
+        }
+
+    step = _ensure_step(item)
+    return {"type": "step", "name": step.name}

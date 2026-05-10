@@ -11,11 +11,20 @@ result = await flow.run(input, raise_on_error=True)
 By default, failed flows raise `FlowExecutionError`. Use
 `raise_on_error=False` to receive `FlowResult(success=False)`.
 
-`Flow.events(input, raise_on_error=False)` runs the same flow and yields live
-`FlowEvent` objects:
+Pass a `JsonCheckpointStore` to persist top-level progress:
 
 ```python
-async for event in flow.events("topic"):
+result = await flow.run("topic", checkpoint=store, raise_on_error=False)
+if not result.success:
+    result = await flow.resume(store)
+```
+
+`Flow.events(input, raise_on_error=False, checkpoint=None)` runs the same flow
+and yields live `FlowEvent` objects. `Flow.resume_events(store)` does the same
+for resumed runs:
+
+```python
+async for event in flow.events("topic", checkpoint=store):
     print(event.type, event.step_name)
 ```
 
@@ -28,9 +37,28 @@ Event types are:
 - `retry_scheduled`
 - `flow_completed`
 - `flow_failed`
+- `checkpoint_saved`
+- `checkpoint_loaded`
 
 `flow.events(..., raise_on_error=True)` yields the failure event first, then
 raises `FlowExecutionError`.
+
+## `JsonCheckpointStore`
+
+`JsonCheckpointStore(path)` stores inspectable JSON checkpoints for
+`Flow.run(..., checkpoint=store)` and `Flow.resume(store)`.
+
+```python
+from orchflow import Flow, JsonCheckpointStore
+
+store = JsonCheckpointStore("orchflow-checkpoint.json")
+flow = Flow([collect, draft, publish])
+result = await flow.run("topic", checkpoint=store, raise_on_error=False)
+```
+
+Checkpoints are saved after completed top-level flow items. Payloads must be JSON
+serializable. Missing files, invalid JSON, completed checkpoints, unsupported
+versions, and flow signature mismatches raise `CheckpointError`.
 
 ## `@step`
 
@@ -95,4 +123,4 @@ LiteLLM is optional:
 pip install "orchflow[litellm]"
 ```
 
-Tool-calling loops, MCP, memory, and durability are outside v0.3.
+Tool-calling loops, MCP, memory, and cloud durability are outside v0.4.

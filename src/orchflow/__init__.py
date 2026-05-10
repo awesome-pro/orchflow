@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .agent import Agent
+from .checkpoint import CheckpointError, JsonCheckpointStore
 from .condition import condition
 from .errors import FlowExecutionError
 from .flow import Flow
@@ -11,10 +12,12 @@ from .step import StepContext, step
 
 __all__ = [
     "Agent",
+    "CheckpointError",
     "Flow",
     "FlowEvent",
     "FlowExecutionError",
     "FlowResult",
+    "JsonCheckpointStore",
     "RetryPolicy",
     "StepContext",
     "StepTrace",
@@ -23,4 +26,4 @@ __all__ = [
     "step",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

@@ -31,19 +31,21 @@ Goal: make flow execution observable while it runs.
 
 Goal: support simple human-in-the-loop gates without durable workflow machinery.
 
-- Add `human_input(...)` step helper.
-- Support callback-based input for tests and applications.
-- Support stdin-based input for local demos.
+- Add `human_input(...)` step helper. Shipped in 0.3.0.
+- Support callback-based input for tests and applications. Shipped in 0.3.0.
+- Support stdin-based input for local demos. Shipped in 0.3.0.
 - Reuse existing retry, trace, and event behavior without new event types.
-- Keep review text-only; users route with `condition(...)`.
+  Shipped in 0.3.0.
+- Keep review text-only; users route with `condition(...)`. Shipped in 0.3.0.
 
 ## 0.4.0 - Checkpoints
 
 Goal: add lightweight resume for practical workflows.
 
-- Add JSON checkpoint adapter.
-- Support resume from last successful step.
-- Keep state serialization explicit and inspectable.
+- Add JSON checkpoint adapter. Shipped in 0.4.0.
+- Support resume from top-level item boundaries. Shipped in 0.4.0.
+- Keep state serialization explicit and inspectable. Shipped in 0.4.0.
+- Emit checkpoint saved and loaded events. Shipped in 0.4.0.
 
 ## 0.5.0 - Agent Adapter Upgrade
 

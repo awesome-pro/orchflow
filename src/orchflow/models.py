@@ -23,6 +23,20 @@ class StepTrace:
     def success(self) -> bool:
         return self.error is None
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> StepTrace:
+        return cls(
+            step_name=data["step_name"],
+            input=data["input"],
+            output=data["output"],
+            error=data["error"],
+            attempt=data["attempt"],
+            parallel_group_id=data["parallel_group_id"],
+            duration_seconds=data["duration_seconds"],
+            started_at=datetime.fromisoformat(data["started_at"]),
+            ended_at=datetime.fromisoformat(data["ended_at"]),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "step_name": self.step_name,

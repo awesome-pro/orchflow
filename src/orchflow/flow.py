@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import suppress
 from typing import Any
 
+from .checkpoint import JsonCheckpointStore
 from .condition import Condition
 from .errors import FlowExecutionError
 from .models import FlowEvent, FlowResult
@@ -40,20 +41,30 @@ class Flow:
         input: FlowInput,
         *,
         raise_on_error: bool = True,
+        checkpoint: JsonCheckpointStore | None = None,
     ) -> FlowResult:
         runner = FlowRunner(
             steps=self.steps,
             flow_name=self.name,
             retry_policy=self.retry_policy,
         )
-        result = await runner.run(input)
-        if not result.success and raise_on_error:
-            raise FlowExecutionError(
-                failed_step=result.failed_step or "unknown",
-                original_error=result.exception
-                or RuntimeError(result.error or "flow failed"),
-                result=result,
-            )
+        result = await runner.run(input, checkpoint=checkpoint)
+        _raise_if_failed(result, raise_on_error=raise_on_error)
+        return result
+
+    async def resume(
+        self,
+        checkpoint: JsonCheckpointStore,
+        *,
+        raise_on_error: bool = True,
+    ) -> FlowResult:
+        runner = FlowRunner(
+            steps=self.steps,
+            flow_name=self.name,
+            retry_policy=self.retry_policy,
+        )
+        result = await runner.resume(checkpoint)
+        _raise_if_failed(result, raise_on_error=raise_on_error)
         return result
 
     async def events(
@@ -61,6 +72,49 @@ class Flow:
         input: FlowInput,
         *,
         raise_on_error: bool = False,
+        checkpoint: JsonCheckpointStore | None = None,
+    ) -> AsyncIterator[FlowEvent]:
+        async def run_with_events(emit) -> FlowResult:
+            runner = FlowRunner(
+                steps=self.steps,
+                flow_name=self.name,
+                retry_policy=self.retry_policy,
+                event_handler=emit,
+            )
+            return await runner.run(input, checkpoint=checkpoint)
+
+        async for event in self._event_stream(
+            run_with_events,
+            raise_on_error=raise_on_error,
+        ):
+            yield event
+
+    async def resume_events(
+        self,
+        checkpoint: JsonCheckpointStore,
+        *,
+        raise_on_error: bool = False,
+    ) -> AsyncIterator[FlowEvent]:
+        async def run_with_events(emit) -> FlowResult:
+            runner = FlowRunner(
+                steps=self.steps,
+                flow_name=self.name,
+                retry_policy=self.retry_policy,
+                event_handler=emit,
+            )
+            return await runner.resume(checkpoint)
+
+        async for event in self._event_stream(
+            run_with_events,
+            raise_on_error=raise_on_error,
+        ):
+            yield event
+
+    async def _event_stream(
+        self,
+        run_with_events,
+        *,
+        raise_on_error: bool,
     ) -> AsyncIterator[FlowEvent]:
         queue: asyncio.Queue[FlowEvent | _EventsDone] = asyncio.Queue()
         result: FlowResult | None = None
@@ -71,14 +125,8 @@ class Flow:
 
         async def run_flow() -> None:
             nonlocal result, unexpected_error
-            runner = FlowRunner(
-                steps=self.steps,
-                flow_name=self.name,
-                retry_policy=self.retry_policy,
-                event_handler=emit,
-            )
             try:
-                result = await runner.run(input)
+                result = await run_with_events(emit)
             except Exception as exc:  # noqa: BLE001 - surfaced after queued events
                 unexpected_error = exc
             finally:
@@ -105,13 +153,8 @@ class Flow:
         await task
         if unexpected_error is not None:
             raise unexpected_error
-        if result is not None and not result.success and raise_on_error:
-            raise FlowExecutionError(
-                failed_step=result.failed_step or "unknown",
-                original_error=result.exception
-                or RuntimeError(result.error or "flow failed"),
-                result=result,
-            )
+        if result is not None:
+            _raise_if_failed(result, raise_on_error=raise_on_error)
 
     def __repr__(self) -> str:
         return f"Flow(name={self.name!r}, steps={len(self.steps)})"
@@ -171,3 +214,13 @@ def _step_name(item: Any) -> str:
     if callable(item):
         return getattr(item, "__name__", item.__class__.__name__)
     raise TypeError(f"Expected a step function, got {type(item).__name__}")
+
+
+def _raise_if_failed(result: FlowResult, *, raise_on_error: bool) -> None:
+    if not result.success and raise_on_error:
+        raise FlowExecutionError(
+            failed_step=result.failed_step or "unknown",
+            original_error=result.exception
+            or RuntimeError(result.error or "flow failed"),
+            result=result,
+        )

@@ -7,7 +7,8 @@
 
 Orchflow is a lightweight Python framework for readable multi-agent pipelines.
 It gives you sequential, parallel, conditional, retryable, and observable
-orchestration without forcing every workflow into a heavy graph runtime.
+orchestration, with lightweight human review and JSON resume, without forcing
+every workflow into a heavy graph runtime.
 
 ```bash
 pip install orchflow
@@ -68,6 +69,7 @@ Orchflow is intentionally small, but it is built like a real package:
 - Flat `StepTrace` records for every attempt, including failures
 - Live lifecycle events with `Flow.events(...)`
 - Lightweight human input gates with callback or stdin providers
+- JSON checkpoints and resume for practical long-running workflows
 - Optional LiteLLM-backed `Agent` without making LiteLLM a core dependency
 - Offline test helpers under `orchflow.testing`
 - Typed package metadata, CI, TestPyPI/PyPI release workflows, and tag releases
@@ -85,6 +87,7 @@ Orchflow keeps the public model deliberately small.
 | `FlowResult` | Final output, traces, state, timing, and failure details |
 | `FlowEvent` | Live lifecycle event emitted while a flow runs |
 | `human_input` | Step helper for pausing a flow and collecting reviewer text |
+| `JsonCheckpointStore` | Local JSON checkpoint store for resume |
 
 ## Sequential Flow
 
@@ -204,6 +207,33 @@ By default, `human_input(...)` reads from stdin. Applications and tests can pass
 a sync or async `provider(prompt, context)` callback instead. The human response
 is normal step output, so it is available as `context.previous` to the next step.
 
+## Checkpoint And Resume
+
+Use `JsonCheckpointStore` when a flow should survive a transient failure without
+rerunning completed top-level work.
+
+```python
+from orchflow import Flow, JsonCheckpointStore
+
+store = JsonCheckpointStore("orchflow-checkpoint.json")
+flow = Flow([collect, draft, publish], name="checkpointed-pipeline")
+
+first = await flow.run(
+    "AI agent orchestration",
+    checkpoint=store,
+    raise_on_error=False,
+)
+
+if not first.success:
+    resumed = await flow.resume(store)
+    print(resumed.output)
+```
+
+Checkpoints are plain JSON and are saved after each completed top-level item:
+single steps, selected condition branches, or complete parallel groups. A failed
+parallel group resumes by rerunning the whole group. Successful flows keep the
+checkpoint file and mark it `completed` for inspection.
+
 ## Live Events
 
 `Flow.events(...)` lets applications observe a workflow while it runs.
@@ -222,6 +252,8 @@ Event types:
 - `retry_scheduled`
 - `flow_completed`
 - `flow_failed`
+- `checkpoint_saved`
+- `checkpoint_loaded`
 
 Events are orchestration lifecycle events, not token streaming. The final
 `flow_completed` or `flow_failed` event carries a `FlowResult`.
@@ -286,6 +318,7 @@ uv run python examples/parallel_steps.py
 uv run python examples/conditional_flow.py
 uv run python examples/live_events.py
 uv run python examples/human_review.py
+uv run python examples/checkpoint_resume.py
 ```
 
 Docs:
@@ -315,8 +348,8 @@ TestPyPI publishing is manual through
 through `.github/workflows/publish-pypi.yml`.
 
 ```bash
-git tag -a v0.3.0 -m "Release v0.3.0"
-git push origin v0.3.0
+git tag -a v0.4.0 -m "Release v0.4.0"
+git push origin v0.4.0
 ```
 
 The release workflow verifies that the Git tag matches `pyproject.toml`, uploads
@@ -324,8 +357,7 @@ to PyPI through trusted publishing, and creates a GitHub Release.
 
 ## Roadmap
 
-- `0.3.x`: human input polish and docs improvements
-- `0.4.0`: lightweight checkpoint/resume
+- `0.4.x`: checkpoint/resume polish and docs improvements
 - `0.5.0`: richer optional agent adapters
 
 ## Source Of Truth

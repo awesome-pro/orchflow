@@ -8,15 +8,16 @@ not the other way around.
 Orchflow is a lightweight Python framework for readable multi-agent pipelines.
 It sits between plain Python function chaining and graph-heavy agent runtimes.
 
-The goal for v0.3 is a small, reliable workflow microframework that makes
+The goal for v0.4 is a small, reliable workflow microframework that makes
 sequential, parallel, and conditional agent pipelines easy to write, test,
-inspect, observe, and pause for lightweight human input.
+inspect, observe, pause for lightweight human input, and resume from JSON
+checkpoints.
 
 One-line pitch:
 
 > The simplest way to build readable multi-agent pipelines in Python.
 
-## Scope For v0.3
+## Scope For v0.4
 
 Included:
 
@@ -28,6 +29,7 @@ Included:
 - Flat structured traces
 - Live flow lifecycle events
 - Lightweight human input gates
+- JSON checkpoint and resume support
 - Public `Agent`
 - Offline tests and examples
 - Optional LiteLLM-backed real-agent example
@@ -36,7 +38,6 @@ Included:
 Out of scope:
 
 - Streaming
-- Checkpointing and resume
 - Memory
 - Tool-calling loops
 - MCP tools
@@ -64,6 +65,8 @@ Top-level exports from `orchflow`:
 - `StepTrace`
 - `FlowEvent`
 - `human_input`
+- `JsonCheckpointStore`
+- `CheckpointError`
 - `FlowExecutionError`
 
 Testing helpers live under `orchflow.testing` only:
@@ -82,7 +85,7 @@ The core `Agent.run(prompt, context=None)` API supports prompt-only calls throug
 optional LiteLLM integration. LiteLLM is not a required runtime dependency.
 
 Tool-calling loops, MCP tools, memory, and durable agent state are not part of
-v0.3.
+v0.4.
 
 ### Step
 
@@ -143,9 +146,9 @@ flow = Flow([
 
 `context.state` is one shared mutable dictionary for the run.
 
-Parallel branches share the same state dict in v0.3. If multiple branches write
+Parallel branches share the same state dict in v0.4. If multiple branches write
 the same key, the behavior is last-write-wins. There is no deep-copy isolation
-and no state conflict error in v0.3.
+and no state conflict error in v0.4.
 
 ### Human Input
 
@@ -173,8 +176,46 @@ Behavior:
 - Provider and stdin failures are normal step failures and use existing retry,
   trace, and event behavior.
 
-v0.3 human input is intentionally text-only. It does not include structured
+Human input remains text-only in v0.4. It does not include structured
 approval objects, abort-on-reject behavior, durable resume, or a web UI.
+
+### Checkpoints
+
+`JsonCheckpointStore` persists inspectable JSON checkpoints for a flow run.
+
+```python
+store = JsonCheckpointStore("orchflow-checkpoint.json")
+
+result = await flow.run("AI agents in 2026", checkpoint=store)
+result = await flow.resume(store)
+```
+
+Behavior:
+
+- `Flow.run(input, checkpoint=store)` saves after each completed top-level flow
+  item.
+- `Flow.resume(store)` loads the checkpoint and resumes from
+  `next_step_index`.
+- `Flow.events(input, checkpoint=store)` and `Flow.resume_events(store)` emit
+  checkpoint lifecycle events.
+- Checkpoint event types are `checkpoint_saved` and `checkpoint_loaded`.
+- Checkpoint JSON stores `version`, `status`, `run_id`, `flow_name`,
+  `flow_signature`, `original_input`, `next_step_index`, `previous`, `state`,
+  `traces`, timestamps, and failure error when present.
+- A completed top-level item may be a single step, a selected condition branch,
+  or a complete parallel group.
+- Failed top-level parallel groups resume by rerunning the whole group. v0.4
+  does not resume individual parallel branches.
+- Checkpoint payloads must be JSON serializable. Non-JSON inputs, outputs,
+  state, or traces raise `CheckpointError`.
+- Successful flows keep the checkpoint file and mark it `status="completed"`.
+- `Flow.resume(...)` rejects completed checkpoints, missing files, invalid JSON,
+  unsupported checkpoint versions, and flow signature mismatches with
+  `CheckpointError`.
+
+v0.4 checkpointing is intentionally local and JSON-only. It does not include
+cloud stores, pickle serialization, custom codecs, partial parallel resume,
+checkpoint encryption, or a durable human-review UI.
 
 ## Tracing
 
@@ -209,6 +250,8 @@ Event types:
 - `retry_scheduled`
 - `flow_completed`
 - `flow_failed`
+- `checkpoint_saved`
+- `checkpoint_loaded`
 
 `Flow.events()` streams orchestration lifecycle events, not LLM tokens.
 
@@ -271,6 +314,9 @@ When `Flow.run(..., raise_on_error=False)` is used, the flow returns
 ### 0.4.0 - Checkpoints
 
 - Add lightweight JSON checkpoint and resume support.
+- Save after completed top-level flow items.
+- Add checkpoint lifecycle events.
+- Keep checkpoint payloads JSON-only and inspectable.
 
 ## Test Requirements
 
@@ -290,14 +336,26 @@ The test suite must verify:
 - Human input provider failures are traced and retried like normal step
   failures.
 - Human input emits normal step lifecycle events.
+- Fresh runs write checkpoints and mark them completed on success.
+- Failed checkpointed runs can resume from the next item after the last
+  successful checkpoint.
+- Resumed runs preserve original input, previous output, shared state, and
+  stored traces while appending new traces.
+- Conditions and parallel groups checkpoint at top-level item boundaries.
+- Completed checkpoints, missing files, invalid JSON, unsupported versions, and
+  flow signature mismatches raise `CheckpointError`.
+- Non-JSON-serializable checkpoint payloads raise `CheckpointError`.
+- Checkpointed event streams emit `checkpoint_saved` and `checkpoint_loaded`.
 - `MockAgent` and `CallableAgent` import from `orchflow.testing`.
 - Optional LiteLLM behavior skips cleanly when the dependency is missing.
 
 ## Implementation Order
 
 1. Update this `AGENTS.md`.
-2. Implement `human_input(...)` as a normal `Step`.
-3. Add top-level export and version bump.
-4. Add human input tests.
-5. Add stdin example and docs.
+2. Implement `JsonCheckpointStore`, `CheckpointError`, and trace
+   deserialization.
+3. Add checkpoint support to `Flow.run()`, `Flow.events()`, `Flow.resume()`,
+   and `Flow.resume_events()`.
+4. Add checkpoint tests.
+5. Add checkpoint example, docs, changelog, and version bump.
 6. Run tests, quality checks, and package build.

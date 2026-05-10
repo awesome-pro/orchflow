@@ -1,14 +1,23 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+import asyncio
+from collections.abc import AsyncIterator, Sequence
+from contextlib import suppress
 from typing import Any
 
 from .condition import Condition
 from .errors import FlowExecutionError
-from .models import FlowResult
+from .models import FlowEvent, FlowResult
 from .retry import RetryPolicy
 from .runner import FlowItem, FlowRunner
 from .step import FlowInput, Step
+
+
+class _EventsDone:
+    pass
+
+
+_EVENTS_DONE = _EventsDone()
 
 
 class Flow:
@@ -46,6 +55,63 @@ class Flow:
                 result=result,
             )
         return result
+
+    async def events(
+        self,
+        input: FlowInput,
+        *,
+        raise_on_error: bool = False,
+    ) -> AsyncIterator[FlowEvent]:
+        queue: asyncio.Queue[FlowEvent | _EventsDone] = asyncio.Queue()
+        result: FlowResult | None = None
+        unexpected_error: BaseException | None = None
+
+        async def emit(event: FlowEvent) -> None:
+            await queue.put(event)
+
+        async def run_flow() -> None:
+            nonlocal result, unexpected_error
+            runner = FlowRunner(
+                steps=self.steps,
+                flow_name=self.name,
+                retry_policy=self.retry_policy,
+                event_handler=emit,
+            )
+            try:
+                result = await runner.run(input)
+            except Exception as exc:  # noqa: BLE001 - surfaced after queued events
+                unexpected_error = exc
+            finally:
+                await queue.put(_EVENTS_DONE)
+
+        task = asyncio.create_task(run_flow())
+        completed = False
+
+        try:
+            while True:
+                event = await queue.get()
+                if isinstance(event, _EventsDone):
+                    completed = True
+                    break
+                yield event
+        finally:
+            if not completed and not task.done():
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+
+        if not completed:
+            return
+        await task
+        if unexpected_error is not None:
+            raise unexpected_error
+        if result is not None and not result.success and raise_on_error:
+            raise FlowExecutionError(
+                failed_step=result.failed_step or "unknown",
+                original_error=result.exception
+                or RuntimeError(result.error or "flow failed"),
+                result=result,
+            )
 
     def __repr__(self) -> str:
         return f"Flow(name={self.name!r}, steps={len(self.steps)})"

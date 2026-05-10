@@ -11,6 +11,27 @@ result = await flow.run(input, raise_on_error=True)
 By default, failed flows raise `FlowExecutionError`. Use
 `raise_on_error=False` to receive `FlowResult(success=False)`.
 
+`Flow.events(input, raise_on_error=False)` runs the same flow and yields live
+`FlowEvent` objects:
+
+```python
+async for event in flow.events("topic"):
+    print(event.type, event.step_name)
+```
+
+Event types are:
+
+- `flow_started`
+- `step_started`
+- `step_completed`
+- `step_failed`
+- `retry_scheduled`
+- `flow_completed`
+- `flow_failed`
+
+`flow.events(..., raise_on_error=True)` yields the failure event first, then
+raises `FlowExecutionError`.
+
 ## `@step`
 
 ```python
@@ -47,4 +68,4 @@ LiteLLM is optional:
 pip install "orchflow[litellm]"
 ```
 
-Tool-calling loops, MCP, memory, and durability are outside v0.1.
+Tool-calling loops, MCP, memory, and durability are outside v0.2.

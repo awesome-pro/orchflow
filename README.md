@@ -22,6 +22,13 @@ result = await Flow([research, write]).run("agent orchestration")
 print(result.output)
 ```
 
+Watch the same flow while it runs:
+
+```python
+async for event in Flow([research, write]).events("agent orchestration"):
+    print(event.type, event.step_name)
+```
+
 ## Why
 
 Plain Python chaining is easy to read but thin on retries, parallelism, and
@@ -37,6 +44,7 @@ traces, and offline-testable agent workflows.
 - Retry policies
 - Shared run state
 - Flat structured traces
+- Live flow events with `Flow.events(...)`
 - Public `Agent` with optional LiteLLM support
 - Offline testing helpers under `orchflow.testing`
 

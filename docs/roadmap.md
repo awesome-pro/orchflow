@@ -21,11 +21,11 @@ Goal: make the published package feel professional and frictionless.
 
 Goal: make flow execution observable while it runs.
 
-- Add `flow.events(input)` async iterator.
+- Add `flow.events(input)` async iterator. Shipped in 0.2.0.
 - Emit step started, step completed, step failed, retry scheduled, and flow
-  completed events.
-- Keep `flow.run()` behavior unchanged.
-- Add examples for live terminal progress.
+  completed events. Shipped in 0.2.0.
+- Keep `flow.run()` behavior unchanged. Shipped in 0.2.0.
+- Add examples for live terminal progress. Shipped in 0.2.0.
 
 ## 0.3.0 - Human Review
 

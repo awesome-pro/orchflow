@@ -3,18 +3,19 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, TypeGuard
 from uuid import uuid4
 
 from .condition import Condition
-from .models import FlowResult, StepTrace
+from .models import FlowEvent, FlowResult, StepTrace
 from .retry import RetryPolicy
 from .step import FlowInput, Step, StepCallable, StepContext
 
 FlowItem = Step | StepCallable | Condition | list[Any] | tuple[Any, ...]
+EventHandler = Callable[[FlowEvent], Awaitable[None] | None]
 
 
 @dataclass(slots=True)
@@ -30,10 +31,12 @@ class FlowRunner:
         steps: Sequence[FlowItem],
         flow_name: str,
         retry_policy: RetryPolicy,
+        event_handler: EventHandler | None = None,
     ) -> None:
         self.steps = list(steps)
         self.flow_name = flow_name
         self.retry_policy = retry_policy
+        self._event_handler = event_handler
 
     async def run(self, input: FlowInput) -> FlowResult:
         run_id = str(uuid4())
@@ -47,6 +50,16 @@ class FlowRunner:
             "flow_name": self.flow_name,
             "started_at": started_at.isoformat(),
         }
+        await self._emit(
+            FlowEvent(
+                type="flow_started",
+                run_id=run_id,
+                flow_name=self.flow_name,
+                timestamp=started_at,
+                input=input,
+                metadata=metadata.copy(),
+            )
+        )
 
         try:
             for index, item in enumerate(self.steps):
@@ -62,7 +75,7 @@ class FlowRunner:
                 )
         except _StepFailure as failure:
             duration = time.perf_counter() - started_perf
-            return FlowResult(
+            result = FlowResult(
                 output=previous,
                 traces=traces,
                 duration_seconds=duration,
@@ -73,9 +86,22 @@ class FlowRunner:
                 error=str(failure.original_error),
                 exception=failure.original_error,
             )
+            await self._emit(
+                FlowEvent(
+                    type="flow_failed",
+                    run_id=run_id,
+                    flow_name=self.flow_name,
+                    timestamp=datetime.now(UTC),
+                    output=result.output,
+                    error=result.error,
+                    result=result,
+                    metadata=metadata.copy(),
+                )
+            )
+            return result
 
         duration = time.perf_counter() - started_perf
-        return FlowResult(
+        result = FlowResult(
             output=previous,
             traces=traces,
             duration_seconds=duration,
@@ -83,6 +109,25 @@ class FlowRunner:
             state=state,
             metadata=metadata,
         )
+        await self._emit(
+            FlowEvent(
+                type="flow_completed",
+                run_id=run_id,
+                flow_name=self.flow_name,
+                timestamp=datetime.now(UTC),
+                output=result.output,
+                result=result,
+                metadata=metadata.copy(),
+            )
+        )
+        return result
+
+    async def _emit(self, event: FlowEvent) -> None:
+        if self._event_handler is None:
+            return
+        maybe_awaitable = self._event_handler(event)
+        if inspect.isawaitable(maybe_awaitable):
+            await maybe_awaitable
 
     async def _run_item(
         self,
@@ -236,26 +281,72 @@ class FlowRunner:
                     "parallel_group_id": parallel_group_id,
                 },
             )
+            await self._emit(
+                FlowEvent(
+                    type="step_started",
+                    run_id=run_id,
+                    flow_name=self.flow_name,
+                    timestamp=started_at,
+                    step_name=step.name,
+                    step_index=step_index,
+                    attempt=attempt,
+                    parallel_group_id=parallel_group_id,
+                    input=original_input,
+                    metadata=context.metadata.copy(),
+                )
+            )
 
             try:
                 output = await _call_step(step, original_input, context)
             except Exception as exc:  # noqa: BLE001 - traces intentionally capture all failures
                 last_error = exc
                 ended_at = datetime.now(UTC)
-                traces.append(
-                    StepTrace(
+                trace = StepTrace(
+                    step_name=step.name,
+                    input=original_input,
+                    output=None,
+                    error=f"{type(exc).__name__}: {exc}",
+                    attempt=attempt,
+                    parallel_group_id=parallel_group_id,
+                    duration_seconds=time.perf_counter() - started_perf,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                )
+                traces.append(trace)
+                await self._emit(
+                    FlowEvent(
+                        type="step_failed",
+                        run_id=run_id,
+                        flow_name=self.flow_name,
+                        timestamp=ended_at,
                         step_name=step.name,
-                        input=original_input,
-                        output=None,
-                        error=f"{type(exc).__name__}: {exc}",
+                        step_index=step_index,
                         attempt=attempt,
                         parallel_group_id=parallel_group_id,
-                        duration_seconds=time.perf_counter() - started_perf,
-                        started_at=started_at,
-                        ended_at=ended_at,
+                        input=original_input,
+                        error=trace.error,
+                        trace=trace,
+                        metadata=context.metadata.copy(),
                     )
                 )
                 if attempt < policy.max_attempts:
+                    await self._emit(
+                        FlowEvent(
+                            type="retry_scheduled",
+                            run_id=run_id,
+                            flow_name=self.flow_name,
+                            timestamp=datetime.now(UTC),
+                            step_name=step.name,
+                            step_index=step_index,
+                            attempt=attempt,
+                            parallel_group_id=parallel_group_id,
+                            input=original_input,
+                            error=trace.error,
+                            retry_delay=delay,
+                            trace=trace,
+                            metadata=context.metadata.copy(),
+                        )
+                    )
                     if delay:
                         await asyncio.sleep(delay)
                     delay *= policy.backoff
@@ -263,17 +354,32 @@ class FlowRunner:
                 raise _StepFailure(step_name=step.name, original_error=exc) from exc
 
             ended_at = datetime.now(UTC)
-            traces.append(
-                StepTrace(
+            trace = StepTrace(
+                step_name=step.name,
+                input=original_input,
+                output=output,
+                error=None,
+                attempt=attempt,
+                parallel_group_id=parallel_group_id,
+                duration_seconds=time.perf_counter() - started_perf,
+                started_at=started_at,
+                ended_at=ended_at,
+            )
+            traces.append(trace)
+            await self._emit(
+                FlowEvent(
+                    type="step_completed",
+                    run_id=run_id,
+                    flow_name=self.flow_name,
+                    timestamp=ended_at,
                     step_name=step.name,
-                    input=original_input,
-                    output=output,
-                    error=None,
+                    step_index=step_index,
                     attempt=attempt,
                     parallel_group_id=parallel_group_id,
-                    duration_seconds=time.perf_counter() - started_perf,
-                    started_at=started_at,
-                    ended_at=ended_at,
+                    input=original_input,
+                    output=output,
+                    trace=trace,
+                    metadata=context.metadata.copy(),
                 )
             )
             return output

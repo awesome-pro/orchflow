@@ -8,15 +8,15 @@ not the other way around.
 Orchflow is a lightweight Python framework for readable multi-agent pipelines.
 It sits between plain Python function chaining and graph-heavy agent runtimes.
 
-The goal for v0.1 is a small, reliable workflow microframework that makes
-sequential, parallel, and conditional agent pipelines easy to write, test, and
-inspect.
+The goal for v0.2 is a small, reliable workflow microframework that makes
+sequential, parallel, and conditional agent pipelines easy to write, test,
+inspect, and observe while they run.
 
 One-line pitch:
 
 > The simplest way to build readable multi-agent pipelines in Python.
 
-## Scope For v0.1
+## Scope For v0.2
 
 Included:
 
@@ -47,7 +47,7 @@ Validation:
 - Empty flows are invalid and raise `ValueError`.
 - Step names must be unique within a flow.
 - Parallel step groups must contain at least one step.
-- Nested parallel step groups are invalid in v0.1 and raise `TypeError`.
+- Nested parallel step groups are invalid and raise `TypeError`.
 
 ## Public API
 
@@ -61,6 +61,7 @@ Top-level exports from `orchflow`:
 - `RetryPolicy`
 - `FlowResult`
 - `StepTrace`
+- `FlowEvent`
 - `FlowExecutionError`
 
 Testing helpers live under `orchflow.testing` only:
@@ -79,7 +80,7 @@ The core `Agent.run(prompt, context=None)` API supports prompt-only calls throug
 optional LiteLLM integration. LiteLLM is not a required runtime dependency.
 
 Tool-calling loops, MCP tools, memory, and durable agent state are not part of
-v0.1.
+v0.2.
 
 ### Step
 
@@ -140,9 +141,9 @@ flow = Flow([
 
 `context.state` is one shared mutable dictionary for the run.
 
-Parallel branches share the same state dict in v0.1. If multiple branches write
+Parallel branches share the same state dict in v0.2. If multiple branches write
 the same key, the behavior is last-write-wins. There is no deep-copy isolation
-and no state conflict error in v0.1.
+and no state conflict error in v0.2.
 
 ## Tracing
 
@@ -162,6 +163,25 @@ Failed attempts are traceable. Each attempt records:
 - `duration_seconds`
 - `started_at`
 - `ended_at`
+
+## Events
+
+`Flow.events(input)` runs the same engine as `Flow.run(input)` and yields live
+`FlowEvent` objects.
+
+Event types:
+
+- `flow_started`
+- `step_started`
+- `step_completed`
+- `step_failed`
+- `retry_scheduled`
+- `flow_completed`
+- `flow_failed`
+
+`Flow.events()` streams orchestration lifecycle events, not LLM tokens.
+
+`Flow.run()` behavior must remain unchanged.
 
 ## Failure Behavior
 
@@ -209,6 +229,7 @@ When `Flow.run(..., raise_on_error=False)` is used, the flow returns
 
 - Add a flow event iterator for live observability.
 - Emit step lifecycle, retry, and flow lifecycle events.
+- Keep `Flow.run()` behavior unchanged.
 
 ### 0.3.0 - Human Review
 
@@ -220,7 +241,7 @@ When `Flow.run(..., raise_on_error=False)` is used, the flow returns
 
 ## Test Requirements
 
-The v0.1 test suite must verify:
+The test suite must verify:
 
 - Original input is passed as the first argument to every step.
 - `context.previous` changes after each step.

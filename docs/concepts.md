@@ -2,7 +2,7 @@
 
 ## Agent
 
-An `Agent` is a stateless role plus model. It is intentionally small in v0.1:
+An `Agent` is a stateless role plus model. It is intentionally small in v0.2:
 prompt in, text out.
 
 ## Step
@@ -25,9 +25,17 @@ and conditions.
 ## State
 
 `context.state` is shared mutable run state. Parallel steps share the same dict
-and use last-write-wins behavior for v0.1.
+and use last-write-wins behavior for v0.2.
 
 ## Trace
 
 Every step attempt creates one flat `StepTrace`. Parallel traces share a
 `parallel_group_id`; traces are never nested.
+
+## Event
+
+A `FlowEvent` is emitted while a flow runs. Events are useful for terminal
+progress, logs, notebooks, and future UI integrations.
+
+`Flow.events(...)` does not stream LLM tokens. It streams orchestration lifecycle
+events such as step started, retry scheduled, step completed, and flow completed.

@@ -67,3 +67,43 @@ class FlowResult:
             "metadata": self.metadata,
             "error": self.error,
         }
+
+
+@dataclass(slots=True)
+class FlowEvent:
+    """Live execution event yielded by Flow.events()."""
+
+    type: str
+    run_id: str
+    flow_name: str
+    timestamp: datetime
+    step_name: str | None = None
+    step_index: int | None = None
+    attempt: int | None = None
+    parallel_group_id: str | None = None
+    input: Any | None = None
+    output: Any | None = None
+    error: str | None = None
+    retry_delay: float | None = None
+    trace: StepTrace | None = None
+    result: FlowResult | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": self.type,
+            "run_id": self.run_id,
+            "flow_name": self.flow_name,
+            "timestamp": self.timestamp.isoformat(),
+            "step_name": self.step_name,
+            "step_index": self.step_index,
+            "attempt": self.attempt,
+            "parallel_group_id": self.parallel_group_id,
+            "input": self.input,
+            "output": self.output,
+            "error": self.error,
+            "retry_delay": self.retry_delay,
+            "trace": self.trace.to_dict() if self.trace else None,
+            "result": self.result.to_dict() if self.result else None,
+            "metadata": self.metadata,
+        }

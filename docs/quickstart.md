@@ -45,6 +45,19 @@ asyncio.run(main())
 The first argument, `input`, is always the original `flow.run(...)` input.
 Use `context.previous` for the previous step output.
 
+## Live Events
+
+Use `flow.events(...)` when you want live observability instead of waiting for
+the final `FlowResult`.
+
+```python
+async for event in flow.events("agent orchestration"):
+    print(event.type, event.step_name, event.attempt)
+```
+
+The final event is `flow_completed` on success or `flow_failed` on failure. That
+event carries the same `FlowResult` shape used by `flow.run()`.
+
 ## Parallel Steps
 
 ```python
@@ -61,7 +74,7 @@ Parallel outputs become a dict keyed by step name:
 {"research_web": "...", "research_docs": "..."}
 ```
 
-Parallel steps share the same `context.state` dict in v0.1. If two branches
+Parallel steps share the same `context.state` dict in v0.2. If two branches
 write the same key, the last write wins.
 
 ## Optional Real LLM Calls

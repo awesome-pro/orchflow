@@ -4,13 +4,14 @@ from .agent import Agent
 from .condition import condition
 from .errors import FlowExecutionError
 from .flow import Flow
-from .models import FlowResult, StepTrace
+from .models import FlowEvent, FlowResult, StepTrace
 from .retry import RetryPolicy
 from .step import StepContext, step
 
 __all__ = [
     "Agent",
     "Flow",
+    "FlowEvent",
     "FlowExecutionError",
     "FlowResult",
     "RetryPolicy",
@@ -20,4 +21,4 @@ __all__ = [
     "step",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

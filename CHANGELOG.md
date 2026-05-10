@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- Add `human_input(...)` step helper for lightweight human review gates.
+- Support stdin fallback for local demos.
+- Support sync and async provider callbacks for tests and applications.
+- Reuse existing retry, trace, and event behavior for human input steps.
+- Add human review example and documentation.
+
 ## 0.2.0
 
 - Add `Flow.events(input)` async iterator for live flow observability.

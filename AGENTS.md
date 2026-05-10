@@ -8,15 +8,15 @@ not the other way around.
 Orchflow is a lightweight Python framework for readable multi-agent pipelines.
 It sits between plain Python function chaining and graph-heavy agent runtimes.
 
-The goal for v0.2 is a small, reliable workflow microframework that makes
+The goal for v0.3 is a small, reliable workflow microframework that makes
 sequential, parallel, and conditional agent pipelines easy to write, test,
-inspect, and observe while they run.
+inspect, observe, and pause for lightweight human input.
 
 One-line pitch:
 
 > The simplest way to build readable multi-agent pipelines in Python.
 
-## Scope For v0.2
+## Scope For v0.3
 
 Included:
 
@@ -26,6 +26,8 @@ Included:
 - Retry policy
 - Shared mutable state
 - Flat structured traces
+- Live flow lifecycle events
+- Lightweight human input gates
 - Public `Agent`
 - Offline tests and examples
 - Optional LiteLLM-backed real-agent example
@@ -33,7 +35,6 @@ Included:
 
 Out of scope:
 
-- Human-in-the-loop
 - Streaming
 - Checkpointing and resume
 - Memory
@@ -62,6 +63,7 @@ Top-level exports from `orchflow`:
 - `FlowResult`
 - `StepTrace`
 - `FlowEvent`
+- `human_input`
 - `FlowExecutionError`
 
 Testing helpers live under `orchflow.testing` only:
@@ -80,7 +82,7 @@ The core `Agent.run(prompt, context=None)` API supports prompt-only calls throug
 optional LiteLLM integration. LiteLLM is not a required runtime dependency.
 
 Tool-calling loops, MCP tools, memory, and durable agent state are not part of
-v0.2.
+v0.3.
 
 ### Step
 
@@ -141,9 +143,38 @@ flow = Flow([
 
 `context.state` is one shared mutable dictionary for the run.
 
-Parallel branches share the same state dict in v0.2. If multiple branches write
+Parallel branches share the same state dict in v0.3. If multiple branches write
 the same key, the behavior is last-write-wins. There is no deep-copy isolation
-and no state conflict error in v0.2.
+and no state conflict error in v0.3.
+
+### Human Input
+
+`human_input(...)` creates a normal `Step` that pauses a flow and returns text
+from a human reviewer.
+
+```python
+review = human_input(
+    lambda ctx: f"Review this draft:\n{ctx.previous}\nDecision: ",
+    name="review",
+)
+```
+
+Behavior:
+
+- `human_input(...)` returns a `Step`.
+- The first step argument remains the original `flow.run(...)` input.
+- The prompt may be a string or a callable that receives `StepContext`.
+- The returned human response becomes the step output.
+- `context.previous`, `context.state`, and metadata are available while building
+  the prompt and inside custom providers.
+- If no provider is passed, the helper reads from stdin using
+  `asyncio.to_thread(input, prompt_text)`.
+- Custom providers may be sync or async.
+- Provider and stdin failures are normal step failures and use existing retry,
+  trace, and event behavior.
+
+v0.3 human input is intentionally text-only. It does not include structured
+approval objects, abort-on-reject behavior, durable resume, or a web UI.
 
 ## Tracing
 
@@ -233,7 +264,9 @@ When `Flow.run(..., raise_on_error=False)` is used, the flow returns
 
 ### 0.3.0 - Human Review
 
-- Add simple human-in-the-loop gates with callback and stdin support.
+- Add `human_input(...)` step helper with callback and stdin support.
+- Keep human review text-only; users route with `condition(...)`.
+- Reuse existing trace, retry, and event behavior without new event types.
 
 ### 0.4.0 - Checkpoints
 
@@ -251,17 +284,20 @@ The test suite must verify:
 - Retry success and retry failure work.
 - Parallel traces are flat and share `parallel_group_id`.
 - Shared state uses last-write-wins behavior in parallel branches.
+- `human_input(...)` returns provider/stdin text as normal step output.
+- Human input prompts can use `StepContext`.
+- Sync and async human input providers work.
+- Human input provider failures are traced and retried like normal step
+  failures.
+- Human input emits normal step lifecycle events.
 - `MockAgent` and `CallableAgent` import from `orchflow.testing`.
 - Optional LiteLLM behavior skips cleanly when the dependency is missing.
 
 ## Implementation Order
 
 1. Update this `AGENTS.md`.
-2. Add project metadata and package scaffold.
-3. Implement models, step decorator, retry policy, conditions, runner, flow, and
-   public exports.
-4. Implement public `Agent` with optional LiteLLM support.
-5. Add testing helpers under `orchflow.testing`.
-6. Add offline examples and optional LiteLLM example.
-7. Add docs and README.
-8. Run tests and quality checks.
+2. Implement `human_input(...)` as a normal `Step`.
+3. Add top-level export and version bump.
+4. Add human input tests.
+5. Add stdin example and docs.
+6. Run tests, quality checks, and package build.

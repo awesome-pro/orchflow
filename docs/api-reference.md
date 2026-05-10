@@ -53,6 +53,33 @@ condition(
 )
 ```
 
+## `human_input`
+
+`human_input(...)` creates a normal step that pauses a flow and returns human
+text.
+
+```python
+review = human_input(
+    lambda ctx: f"Review this draft:\n{ctx.previous}\nDecision: ",
+    name="review",
+)
+```
+
+By default, the helper reads from stdin. Tests and applications can pass a sync
+or async provider:
+
+```python
+def reviewer(prompt, context):
+    return "approve"
+
+
+review = human_input("Decision: ", name="review", provider=reviewer)
+```
+
+The provider receives the resolved prompt and the current `StepContext`. Provider
+failures are normal step failures, so existing retry, trace, and event behavior
+applies.
+
 ## `Agent`
 
 `Agent` is a stateless, role-based helper for prompt-only LiteLLM calls.
@@ -68,4 +95,4 @@ LiteLLM is optional:
 pip install "orchflow[litellm]"
 ```
 
-Tool-calling loops, MCP, memory, and durability are outside v0.2.
+Tool-calling loops, MCP, memory, and durability are outside v0.3.

@@ -2,7 +2,7 @@
 
 ## Agent
 
-An `Agent` is a stateless role plus model. It is intentionally small in v0.2:
+An `Agent` is a stateless role plus model. It is intentionally small in v0.3:
 prompt in, text out.
 
 ## Step
@@ -25,7 +25,7 @@ and conditions.
 ## State
 
 `context.state` is shared mutable run state. Parallel steps share the same dict
-and use last-write-wins behavior for v0.2.
+and use last-write-wins behavior for v0.3.
 
 ## Trace
 
@@ -39,3 +39,12 @@ progress, logs, notebooks, and future UI integrations.
 
 `Flow.events(...)` does not stream LLM tokens. It streams orchestration lifecycle
 events such as step started, retry scheduled, step completed, and flow completed.
+
+## Human Input
+
+`human_input(...)` is a step helper for lightweight human review. It resolves a
+prompt from a string or `StepContext` callable, then returns the human response
+as normal step output.
+
+The default provider reads from stdin for local demos. Applications and tests
+can pass a sync or async provider callback.

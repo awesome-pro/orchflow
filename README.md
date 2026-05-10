@@ -67,6 +67,7 @@ Orchflow is intentionally small, but it is built like a real package:
 - Shared run state with explicit `StepContext`
 - Flat `StepTrace` records for every attempt, including failures
 - Live lifecycle events with `Flow.events(...)`
+- Lightweight human input gates with callback or stdin providers
 - Optional LiteLLM-backed `Agent` without making LiteLLM a core dependency
 - Offline test helpers under `orchflow.testing`
 - Typed package metadata, CI, TestPyPI/PyPI release workflows, and tag releases
@@ -83,6 +84,7 @@ Orchflow keeps the public model deliberately small.
 | `Flow` | Orchestrates sequential, parallel, and conditional execution |
 | `FlowResult` | Final output, traces, state, timing, and failure details |
 | `FlowEvent` | Live lifecycle event emitted while a flow runs |
+| `human_input` | Step helper for pausing a flow and collecting reviewer text |
 
 ## Sequential Flow
 
@@ -154,6 +156,53 @@ flow = Flow([
 
 The predicate receives the current `StepContext`, so routing can use
 `context.previous`, shared state, or run metadata.
+
+## Human Review
+
+Use `human_input(...)` when a pipeline needs a lightweight review point without
+adding checkpointing, queues, or a separate UI.
+
+```python
+from orchflow import Flow, StepContext, condition, human_input, step
+
+
+@step
+async def draft(input: str, context: StepContext) -> str:
+    text = f"Draft about {input}"
+    context.state["draft"] = text
+    return text
+
+
+review = human_input(
+    lambda ctx: f"Review this draft:\n{ctx.previous}\n\nDecision: ",
+    name="human_review",
+)
+
+
+@step
+async def publish(input: str, context: StepContext) -> str:
+    return f"Published: {context.state['draft']}"
+
+
+@step
+async def revise(input: str, context: StepContext) -> str:
+    return f"Revision requested: {context.previous}"
+
+
+flow = Flow([
+    draft,
+    review,
+    condition(
+        when=lambda ctx: str(ctx.previous).strip().lower() == "approve",
+        then=publish,
+        otherwise=revise,
+    ),
+])
+```
+
+By default, `human_input(...)` reads from stdin. Applications and tests can pass
+a sync or async `provider(prompt, context)` callback instead. The human response
+is normal step output, so it is available as `context.previous` to the next step.
 
 ## Live Events
 
@@ -236,6 +285,7 @@ uv run python examples/basic_sequential.py
 uv run python examples/parallel_steps.py
 uv run python examples/conditional_flow.py
 uv run python examples/live_events.py
+uv run python examples/human_review.py
 ```
 
 Docs:
@@ -265,8 +315,8 @@ TestPyPI publishing is manual through
 through `.github/workflows/publish-pypi.yml`.
 
 ```bash
-git tag -a v0.2.0 -m "Release v0.2.0"
-git push origin v0.2.0
+git tag -a v0.3.0 -m "Release v0.3.0"
+git push origin v0.3.0
 ```
 
 The release workflow verifies that the Git tag matches `pyproject.toml`, uploads
@@ -274,8 +324,7 @@ to PyPI through trusted publishing, and creates a GitHub Release.
 
 ## Roadmap
 
-- `0.2.x`: event API polish and README/docs improvements
-- `0.3.0`: human-in-the-loop gates
+- `0.3.x`: human input polish and docs improvements
 - `0.4.0`: lightweight checkpoint/resume
 - `0.5.0`: richer optional agent adapters
 

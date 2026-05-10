@@ -34,6 +34,8 @@ Goal: support simple human-in-the-loop gates without durable workflow machinery.
 - Add `human_input(...)` step helper.
 - Support callback-based input for tests and applications.
 - Support stdin-based input for local demos.
+- Reuse existing retry, trace, and event behavior without new event types.
+- Keep review text-only; users route with `condition(...)`.
 
 ## 0.4.0 - Checkpoints
 

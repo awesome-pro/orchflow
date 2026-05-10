@@ -74,8 +74,24 @@ Parallel outputs become a dict keyed by step name:
 {"research_web": "...", "research_docs": "..."}
 ```
 
-Parallel steps share the same `context.state` dict in v0.2. If two branches
+Parallel steps share the same `context.state` dict in v0.3. If two branches
 write the same key, the last write wins.
+
+## Human Review
+
+Use `human_input(...)` for a lightweight review point:
+
+```python
+from orchflow import human_input
+
+review = human_input(
+    lambda ctx: f"Review this draft:\n{ctx.previous}\nDecision: ",
+    name="review",
+)
+```
+
+Without a custom provider, the step reads from stdin. In applications and tests,
+pass a sync or async `provider(prompt, context)` callback.
 
 ## Optional Real LLM Calls
 

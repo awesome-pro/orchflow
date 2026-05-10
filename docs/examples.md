@@ -7,6 +7,7 @@ uv run python examples/basic_sequential.py
 uv run python examples/parallel_steps.py
 uv run python examples/conditional_flow.py
 uv run python examples/live_events.py
+uv run python examples/human_review.py
 ```
 
 Run the optional LiteLLM example after installing the extra and configuring a

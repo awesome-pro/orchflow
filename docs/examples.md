@@ -17,4 +17,5 @@ provider API key:
 ```bash
 uv sync --extra dev --extra litellm
 uv run python examples/litellm_agent.py
+uv run python examples/structured_agent.py
 ```

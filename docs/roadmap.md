@@ -51,6 +51,16 @@ Goal: add lightweight resume for practical workflows.
 
 Goal: make `Agent` more useful without turning Orchflow into a full agent SDK.
 
-- Add structured response parsing.
-- Add simple provider configuration.
-- Evaluate basic one-turn tool-call support as an optional adapter feature.
+- Add `AgentConfig` provider configuration. Shipped in 0.5.0.
+- Add `Agent.run_structured(...)`. Shipped in 0.5.0.
+- Support JSON schema dictionaries and optional Pydantic model classes.
+  Shipped in 0.5.0.
+- Defer tool execution to a later release.
+
+## 0.6.0 - Tool Execution
+
+Goal: evaluate one-turn tool execution without adding a durable agent loop.
+
+- Add a small tool schema helper.
+- Support one model-requested tool execution followed by a final model response.
+- Keep long-running tool loops and MCP out of scope.

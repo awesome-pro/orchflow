@@ -74,7 +74,7 @@ Parallel outputs become a dict keyed by step name:
 {"research_web": "...", "research_docs": "..."}
 ```
 
-Parallel steps share the same `context.state` dict in v0.4. If two branches
+Parallel steps share the same `context.state` dict in v0.5. If two branches
 write the same key, the last write wins.
 
 ## Human Review
@@ -122,3 +122,27 @@ pip install "orchflow[litellm]"
 ```
 
 Core tests and examples run offline with `orchflow.testing.MockAgent`.
+
+For structured outputs:
+
+```python
+from orchflow import Agent, AgentConfig
+
+agent = Agent(
+    name="extractor",
+    role="Extract structured data.",
+    config=AgentConfig(model="gpt-4o-mini", temperature=0),
+)
+
+data = await agent.run_structured(
+    "Ada works at OpenAI.",
+    schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "company": {"type": "string"},
+        },
+        "required": ["name", "company"],
+    },
+)
+```

@@ -110,12 +110,46 @@ applies.
 
 ## `Agent`
 
-`Agent` is a stateless, role-based helper for prompt-only LiteLLM calls.
+`Agent` is a stateless, role-based helper for LiteLLM-backed calls.
 
 ```python
 agent = Agent(name="writer", role="Write clearly.", model="gpt-4o-mini")
 text = await agent.run("Explain orchestration")
 ```
+
+Use `AgentConfig` for typed provider configuration:
+
+```python
+agent = Agent(
+    name="extractor",
+    role="Extract structured data.",
+    config=AgentConfig(
+        model="gpt-4o-mini",
+        temperature=0,
+        max_tokens=500,
+    ),
+)
+```
+
+Use `run_structured(...)` for JSON schema or optional Pydantic outputs:
+
+```python
+person = await agent.run_structured(
+    "Ada works at OpenAI.",
+    schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "company": {"type": "string"},
+        },
+        "required": ["name", "company"],
+    },
+)
+```
+
+`run_structured(...)` returns parsed JSON for schema dictionaries and a Pydantic
+model instance for Pydantic model classes. Invalid JSON and validation failures
+raise `StructuredOutputError`.
 
 LiteLLM is optional:
 
@@ -123,4 +157,4 @@ LiteLLM is optional:
 pip install "orchflow[litellm]"
 ```
 
-Tool-calling loops, MCP, memory, and cloud durability are outside v0.4.
+Tool-calling loops, MCP, memory, and cloud durability are outside v0.5.

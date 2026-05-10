@@ -71,6 +71,7 @@ Orchflow is intentionally small, but it is built like a real package:
 - Lightweight human input gates with callback or stdin providers
 - JSON checkpoints and resume for practical long-running workflows
 - Optional LiteLLM-backed `Agent` without making LiteLLM a core dependency
+- Structured agent outputs with JSON schema or optional Pydantic models
 - Offline test helpers under `orchflow.testing`
 - Typed package metadata, CI, TestPyPI/PyPI release workflows, and tag releases
 
@@ -81,6 +82,7 @@ Orchflow keeps the public model deliberately small.
 | Concept | Purpose |
 | --- | --- |
 | `Agent` | Stateless role-based LLM helper with optional LiteLLM support |
+| `AgentConfig` | Typed provider configuration for Agent calls |
 | `@step` | Decorator for a unit of workflow work |
 | `StepContext` | Carries previous output, original input, metadata, and shared state |
 | `Flow` | Orchestrates sequential, parallel, and conditional execution |
@@ -307,8 +309,35 @@ writer = Agent(
 text = await writer.run("Explain lightweight orchestration")
 ```
 
-Tool-calling loops, memory, and durable agent state are intentionally outside
-the current scope. Orchflow focuses on orchestration first.
+For structured workflows, use `AgentConfig` and `run_structured(...)`:
+
+```python
+from orchflow import Agent, AgentConfig
+
+extractor = Agent(
+    name="extractor",
+    role="Extract structured data. Return only JSON.",
+    config=AgentConfig(model="gpt-4o-mini", temperature=0),
+)
+
+person = await extractor.run_structured(
+    "Ada works at OpenAI.",
+    schema={
+        "title": "person",
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "company": {"type": "string"},
+        },
+        "required": ["name", "company"],
+    },
+)
+```
+
+`run_structured(...)` returns parsed JSON for schema dictionaries and a Pydantic
+model instance when a Pydantic model class is passed. Tool-calling loops, memory,
+and durable agent state are intentionally outside the current scope. Orchflow
+focuses on orchestration first.
 
 ## Examples
 
@@ -319,6 +348,14 @@ uv run python examples/conditional_flow.py
 uv run python examples/live_events.py
 uv run python examples/human_review.py
 uv run python examples/checkpoint_resume.py
+```
+
+Optional LiteLLM-backed examples after installing `orchflow[litellm]` and
+configuring a provider API key:
+
+```bash
+uv run python examples/litellm_agent.py
+uv run python examples/structured_agent.py
 ```
 
 Docs:
@@ -348,8 +385,8 @@ TestPyPI publishing is manual through
 through `.github/workflows/publish-pypi.yml`.
 
 ```bash
-git tag -a v0.4.0 -m "Release v0.4.0"
-git push origin v0.4.0
+git tag -a v0.5.0 -m "Release v0.5.0"
+git push origin v0.5.0
 ```
 
 The release workflow verifies that the Git tag matches `pyproject.toml`, uploads
@@ -357,8 +394,8 @@ to PyPI through trusted publishing, and creates a GitHub Release.
 
 ## Roadmap
 
-- `0.4.x`: checkpoint/resume polish and docs improvements
-- `0.5.0`: richer optional agent adapters
+- `0.5.x`: structured agent polish and docs improvements
+- `0.6.0`: evaluate one-turn tool execution
 
 ## Source Of Truth
 

@@ -2,8 +2,9 @@
 
 ## Agent
 
-An `Agent` is a stateless role plus model. It is intentionally small in v0.4:
-prompt in, text out.
+An `Agent` is a stateless role plus model. `run(...)` returns plain text, while
+`run_structured(...)` returns parsed JSON or an optional Pydantic model instance.
+Provider settings live in `AgentConfig`.
 
 ## Step
 
@@ -25,7 +26,7 @@ and conditions.
 ## State
 
 `context.state` is shared mutable run state. Parallel steps share the same dict
-and use last-write-wins behavior for v0.4.
+and use last-write-wins behavior for v0.5.
 
 ## Trace
 
@@ -55,5 +56,5 @@ can pass a sync or async provider callback.
 flow items. A resumed flow keeps the original input, previous output, state, and
 stored traces, then continues from the saved `next_step_index`.
 
-Checkpoints are intentionally JSON-only in v0.4. If input, output, state, or
+Checkpoints are intentionally JSON-only in v0.5. If input, output, state, or
 traces cannot serialize to JSON, Orchflow raises `CheckpointError`.

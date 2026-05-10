@@ -8,16 +8,16 @@ not the other way around.
 Orchflow is a lightweight Python framework for readable multi-agent pipelines.
 It sits between plain Python function chaining and graph-heavy agent runtimes.
 
-The goal for v0.4 is a small, reliable workflow microframework that makes
+The goal for v0.5 is a small, reliable workflow microframework that makes
 sequential, parallel, and conditional agent pipelines easy to write, test,
 inspect, observe, pause for lightweight human input, and resume from JSON
-checkpoints.
+checkpoints. v0.5 also improves `Agent` for structured AI workflows.
 
 One-line pitch:
 
 > The simplest way to build readable multi-agent pipelines in Python.
 
-## Scope For v0.4
+## Scope For v0.5
 
 Included:
 
@@ -30,6 +30,8 @@ Included:
 - Live flow lifecycle events
 - Lightweight human input gates
 - JSON checkpoint and resume support
+- Structured agent outputs
+- Typed agent provider configuration
 - Public `Agent`
 - Offline tests and examples
 - Optional LiteLLM-backed real-agent example
@@ -67,6 +69,8 @@ Top-level exports from `orchflow`:
 - `human_input`
 - `JsonCheckpointStore`
 - `CheckpointError`
+- `AgentConfig`
+- `StructuredOutputError`
 - `FlowExecutionError`
 
 Testing helpers live under `orchflow.testing` only:
@@ -78,14 +82,56 @@ Testing helpers live under `orchflow.testing` only:
 
 ### Agent
 
-An `Agent` is a stateless, role-based LLM helper. It keeps the common multi-agent
-case simple while leaving orchestration in the `Flow`.
+An `Agent` is a stateless, role-based LLM helper. It keeps the common
+multi-agent case simple while leaving orchestration in the `Flow`.
 
-The core `Agent.run(prompt, context=None)` API supports prompt-only calls through
+The core `Agent.run(prompt, context=None)` API returns plain text through
 optional LiteLLM integration. LiteLLM is not a required runtime dependency.
 
-Tool-calling loops, MCP tools, memory, and durable agent state are not part of
-v0.4.
+`AgentConfig` provides typed provider configuration:
+
+```python
+agent = Agent(
+    name="extractor",
+    role="Extract structured data.",
+    config=AgentConfig(
+        model="openai/gpt-5-mini",
+        temperature=0,
+    ),
+)
+```
+
+Existing direct `Agent` fields remain backward compatible. If direct fields and
+`config` both provide a value, the direct field wins.
+
+`Agent.run_structured(prompt, schema=...)` returns parsed structured output:
+
+```python
+parsed = await agent.run_structured(
+    "Extract name and company from: Ada at OpenAI",
+    schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "company": {"type": "string"},
+        },
+        "required": ["name", "company"],
+    },
+)
+```
+
+Structured output behavior:
+
+- JSON schema dictionaries return parsed JSON values.
+- Pydantic model classes are supported when Pydantic is already installed by the
+  user.
+- Pydantic is not a core Orchflow dependency.
+- `StructuredOutputError` is raised for invalid JSON, validation failures,
+  missing schema support, or empty structured content.
+
+Tool-calling loops, MCP tools, memory, streaming LLM tokens, provider-specific
+routing, and durable agent state are not part of v0.5. Users should call tools
+inside normal steps until a later release adds dedicated tool support.
 
 ### Step
 
@@ -146,9 +192,9 @@ flow = Flow([
 
 `context.state` is one shared mutable dictionary for the run.
 
-Parallel branches share the same state dict in v0.4. If multiple branches write
+Parallel branches share the same state dict in v0.5. If multiple branches write
 the same key, the behavior is last-write-wins. There is no deep-copy isolation
-and no state conflict error in v0.4.
+and no state conflict error in v0.5.
 
 ### Human Input
 
@@ -176,7 +222,7 @@ Behavior:
 - Provider and stdin failures are normal step failures and use existing retry,
   trace, and event behavior.
 
-Human input remains text-only in v0.4. It does not include structured
+Human input remains text-only in v0.5. It does not include structured
 approval objects, abort-on-reject behavior, durable resume, or a web UI.
 
 ### Checkpoints
@@ -204,7 +250,7 @@ Behavior:
   `traces`, timestamps, and failure error when present.
 - A completed top-level item may be a single step, a selected condition branch,
   or a complete parallel group.
-- Failed top-level parallel groups resume by rerunning the whole group. v0.4
+- Failed top-level parallel groups resume by rerunning the whole group. v0.5
   does not resume individual parallel branches.
 - Checkpoint payloads must be JSON serializable. Non-JSON inputs, outputs,
   state, or traces raise `CheckpointError`.
@@ -213,7 +259,7 @@ Behavior:
   unsupported checkpoint versions, and flow signature mismatches with
   `CheckpointError`.
 
-v0.4 checkpointing is intentionally local and JSON-only. It does not include
+v0.5 checkpointing remains local and JSON-only. It does not include
 cloud stores, pickle serialization, custom codecs, partial parallel resume,
 checkpoint encryption, or a durable human-review UI.
 
@@ -318,6 +364,13 @@ When `Flow.run(..., raise_on_error=False)` is used, the flow returns
 - Add checkpoint lifecycle events.
 - Keep checkpoint payloads JSON-only and inspectable.
 
+### 0.5.0 - Agent Adapter Upgrade
+
+- Add `AgentConfig` for typed provider configuration.
+- Add `Agent.run_structured(prompt, schema=...)`.
+- Support JSON schema dictionaries and optional Pydantic model classes.
+- Keep tool execution out of scope and point users to normal steps.
+
 ## Test Requirements
 
 The test suite must verify:
@@ -346,16 +399,21 @@ The test suite must verify:
   flow signature mismatches raise `CheckpointError`.
 - Non-JSON-serializable checkpoint payloads raise `CheckpointError`.
 - Checkpointed event streams emit `checkpoint_saved` and `checkpoint_loaded`.
+- `Agent.run(...)` remains backward compatible and returns plain text.
+- `AgentConfig` merges provider options correctly.
+- `Agent.run_structured(...)` parses JSON schema outputs.
+- Pydantic-style model parsing works without making Pydantic a core dependency.
+- Invalid JSON and validation failures raise `StructuredOutputError`.
+- Missing LiteLLM dependency errors still mention `orchflow[litellm]`.
 - `MockAgent` and `CallableAgent` import from `orchflow.testing`.
 - Optional LiteLLM behavior skips cleanly when the dependency is missing.
 
 ## Implementation Order
 
 1. Update this `AGENTS.md`.
-2. Implement `JsonCheckpointStore`, `CheckpointError`, and trace
-   deserialization.
-3. Add checkpoint support to `Flow.run()`, `Flow.events()`, `Flow.resume()`,
-   and `Flow.resume_events()`.
-4. Add checkpoint tests.
-5. Add checkpoint example, docs, changelog, and version bump.
+2. Implement `AgentConfig` and `StructuredOutputError`.
+3. Add `Agent.run_structured(prompt, schema=...)` with JSON and Pydantic-style
+   parsing.
+4. Add structured agent tests.
+5. Add structured agent example, docs, changelog, and version bump.
 6. Run tests, quality checks, and package build.

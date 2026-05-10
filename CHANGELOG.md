@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+- Add `AgentConfig` for typed provider configuration.
+- Add `Agent.run_structured(prompt, schema=...)`.
+- Support JSON schema dictionaries and optional Pydantic model classes.
+- Add `StructuredOutputError` for invalid JSON and validation failures.
+- Keep tool execution out of scope and clarify the unsupported-tools message.
+- Add structured agent tests, example, and documentation.
+
 ## 0.4.0
 
 - Add `JsonCheckpointStore` for local JSON checkpoints.

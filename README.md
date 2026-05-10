@@ -14,22 +14,81 @@ every workflow into a heavy graph runtime.
 pip install orchflow
 ```
 
+Build a readable workflow with normal Python functions, then let Orchflow handle
+parallel execution, routing, retries, checkpointing, and traces.
+
 ```python
-from orchflow import Flow, StepContext, step
+import asyncio
+
+from orchflow import Flow, JsonCheckpointStore, StepContext, condition, step
 
 
-@step
-async def research(input: str, context: StepContext) -> str:
-    return f"research about {input}"
+@step(name="plan", retry=2)
+async def plan(input: str, context: StepContext) -> dict[str, str]:
+    context.state["topic"] = input
+    return {
+        "topic": input,
+        "audience": "AI engineering teams",
+    }
 
 
-@step
-async def write(input: str, context: StepContext) -> str:
-    return f"draft based on {context.previous}"
+@step(name="research_docs")
+async def research_docs(input: str, context: StepContext) -> str:
+    return "Orchflow supports retries, traces, events, and JSON resume."
 
 
-result = await Flow([research, write]).run("agent orchestration")
-print(result.output)
+@step(name="research_market")
+async def research_market(input: str, context: StepContext) -> str:
+    return "Teams want agent workflows without modeling everything as a graph."
+
+
+@step(name="synthesize")
+async def synthesize(input: str, context: StepContext) -> str:
+    research = context.previous
+    draft = (
+        f"{context.state['topic']}: "
+        f"{research['research_docs']} "
+        f"{research['research_market']}"
+    )
+    context.state["draft"] = draft
+    return draft
+
+
+@step(name="publish")
+async def publish(input: str, context: StepContext) -> str:
+    return f"Published: {context.previous}"
+
+
+@step(name="revise")
+async def revise(input: str, context: StepContext) -> str:
+    return f"Needs revision: {context.previous}"
+
+
+async def main() -> None:
+    flow = Flow(
+        [
+            plan,
+            [research_docs, research_market],
+            synthesize,
+            condition(
+                when=lambda ctx: len(str(ctx.previous)) <= 240,
+                then=publish,
+                otherwise=revise,
+            ),
+        ],
+        name="launch-note",
+    )
+
+    result = await flow.run(
+        "Orchflow v0.5 release",
+        checkpoint=JsonCheckpointStore("orchflow-checkpoint.json"),
+    )
+
+    print(result.output)
+    print([trace.step_name for trace in result.traces])
+
+
+asyncio.run(main())
 ```
 
 ## Why Orchflow Exists

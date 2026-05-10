@@ -108,7 +108,9 @@ git push origin v0.1.1
 ```
 
 9. Watch `Actions -> Publish to PyPI`.
-10. Verify the release:
+10. The workflow creates a GitHub Release from the tag after PyPI publish
+    succeeds.
+11. Verify the release:
 
 ```bash
 python -m venv /tmp/orchflow-pypi

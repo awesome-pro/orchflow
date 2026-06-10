@@ -22,9 +22,7 @@ events, traces, JSON checkpoints, and resume after failure.
   </a>
 </p>
 
-> GitHub README pages do not render YouTube iframes, so the repository shows a
-> clickable video preview. The portfolio case study embeds the playable video
-> directly.
+[Open the video on YouTube](https://img.youtube.com/vi/vmhhG8_w__I)
 
 ```bash
 pip install orchflow

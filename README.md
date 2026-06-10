@@ -10,6 +10,21 @@ It gives you sequential, parallel, conditional, retryable, and observable
 orchestration, with lightweight human review and JSON resume, without forcing
 every workflow into a heavy graph runtime.
 
+## Video Demo
+
+Watch the walkthrough to see Orchflow used as a real multi-agent launch-brief
+pipeline: readable Python steps, parallel research branches, retries, live
+events, traces, JSON checkpoints, and resume after failure.
+
+<p align="center">
+  <a href="https://youtu.be/vmhhG8_w__I" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.youtube.com/vi/vmhhG8_w__I/maxresdefault.jpg" alt="Orchflow video demo: readable, observable, recoverable multi-agent pipelines" width="720">
+  </a>
+</p>
+
+> GitHub README pages do not render YouTube iframes, so the repository shows a
+> clickable video preview. The portfolio case study embeds the playable video
+> directly.
 
 ```bash
 pip install orchflow
